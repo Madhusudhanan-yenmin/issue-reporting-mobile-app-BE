@@ -1,0 +1,8 @@
+export enum Status {
+  OPEN = 'OPEN',
+  ASSIGNED = 'ASSIGNED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+  REOPENED = 'REOPENED',
+  CLOSED = 'CLOSED',
+}

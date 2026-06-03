@@ -1,0 +1,8 @@
+export enum Category {
+  ROAD = 'ROAD',
+  WATER = 'WATER',
+  ELECTRICITY = 'ELECTRICITY',
+  GARBAGE = 'GARBAGE',
+  DRAINAGE = 'DRAINAGE',
+  OTHER = 'OTHER',
+}
