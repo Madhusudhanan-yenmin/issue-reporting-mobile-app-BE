@@ -5,7 +5,8 @@ import {
   UploadedFiles, 
   UseGuards, 
   UseInterceptors, 
-  BadRequestException 
+  BadRequestException,
+  Req
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -37,11 +38,11 @@ export class UploadController {
   @ApiResponse({ status: 201, description: 'File successfully uploaded, returns image secure URL' })
   @ApiResponse({ status: 400, description: 'No file provided' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async uploadSingleFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadSingleFile(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.uploadService.uploadFile(file);
+    return this.uploadService.uploadFile(file, req);
   }
 
   @Post('multiple')
@@ -65,10 +66,10 @@ export class UploadController {
   @ApiResponse({ status: 201, description: 'Files successfully uploaded, returns array of secure URLs' })
   @ApiResponse({ status: 400, description: 'No files provided' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[]) {
+  async uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[], @Req() req: any) {
     if (!files || files.length === 0) {
       throw new BadRequestException('No files uploaded');
     }
-    return this.uploadService.uploadMultipleFiles(files);
+    return this.uploadService.uploadMultipleFiles(files, req);
   }
 }

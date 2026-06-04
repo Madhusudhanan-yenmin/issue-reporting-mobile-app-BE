@@ -32,4 +32,14 @@ export class CreateIssueDto {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+
+  @ApiProperty({ example: 'http://res.cloudinary.com/...', required: false, description: 'Optional uploaded voice message URL' })
+  @IsString()
+  @IsOptional()
+  voiceUrl?: string;
+
+  @ApiProperty({ example: 'http://res.cloudinary.com/...', required: false, description: 'Optional uploaded video attachment URL' })
+  @IsString()
+  @IsOptional()
+  videoUrl?: string;
 }
