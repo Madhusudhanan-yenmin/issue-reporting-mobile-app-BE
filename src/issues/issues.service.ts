@@ -3,62 +3,108 @@ import {
   ForbiddenException, 
   Injectable, 
   NotFoundException, 
-  Inject,
-  forwardRef
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Issue } from './schemas/issue.schema';
-import { Counter } from './schemas/counter.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, EntityManager } from 'typeorm';
+import { Issue } from './entities/issue.entity';
+import { Counter } from './entities/counter.entity';
+import { Role } from '../common/enums/role.enum';
+import { Status } from '../common/enums/status.enum';
+import { Category } from '../common/enums/category.enum';
+import { Priority } from '../common/enums/priority.enum';
+import { User } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
+import { ActivitiesService } from '../activities/activities.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdatePriorityDto } from './dto/update-priority.dto';
-import { Role } from '../common/enums/role.enum';
-import { Status } from '../common/enums/status.enum';
-import { User } from '../users/schemas/user.schema';
-import { UsersService } from '../users/users.service';
-import { ActivitiesService } from '../activities/activities.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class IssuesService {
   constructor(
-    @InjectModel(Issue.name) private readonly issueModel: Model<Issue>,
-    @InjectModel(Counter.name) private readonly counterModel: Model<Counter>,
+    @InjectRepository(Issue)
+    private readonly issueRepository: Repository<Issue>,
+    @InjectRepository(Counter)
+    private readonly counterRepository: Repository<Counter>,
+    private readonly entityManager: EntityManager,
     private readonly usersService: UsersService,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
+  private mapIssue(issue: any): any {
+    if (!issue) return issue;
+    const { user, officer, ...rest } = issue;
+    return {
+      ...rest,
+      userId: user ? { ...user, _id: user.id } : null,
+      officerId: officer ? { ...officer, _id: officer.id } : null,
+    };
+  }
+
   async generateTicketId(): Promise<string> {
     const currentYear = new Date().getFullYear();
-    const counter = await this.counterModel.findOneAndUpdate(
-      { name: 'issue' },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true }
-    );
-    const sequenceStr = String(counter.seq).padStart(4, '0');
+    let seq = 1;
+
+    // Use transaction with pessimistic write-lock for atomic sequence generation
+    await this.entityManager.transaction(async (manager) => {
+      let counter = await manager
+        .createQueryBuilder(Counter, 'counter')
+        .setLock('pessimistic_write')
+        .where('counter.name = :name', { name: 'issue' })
+        .getOne();
+
+      if (!counter) {
+        counter = manager.create(Counter, { name: 'issue', seq: 1 });
+        await manager.save(Counter, counter);
+        seq = 1;
+      } else {
+        counter.seq += 1;
+        await manager.save(Counter, counter);
+        seq = counter.seq;
+      }
+    });
+
+    const sequenceStr = String(seq).padStart(4, '0');
     return `ISS-${currentYear}-${sequenceStr}`;
   }
 
-  async create(createIssueDto: CreateIssueDto, userId: string): Promise<Issue> {
+  async create(createIssueDto: CreateIssueDto, userId: string): Promise<any> {
     const ticketId = await this.generateTicketId();
+    const id = crypto.randomBytes(12).toString('hex');
     
-    const newIssue = new this.issueModel({
-      ...createIssueDto,
+    const newIssue = this.issueRepository.create({
+      id,
       ticketId,
+      title: createIssueDto.title,
+      description: createIssueDto.description,
+      category: createIssueDto.category,
+      priority: createIssueDto.priority,
       status: Status.OPEN,
-      userId: new Types.ObjectId(userId),
+      location: createIssueDto.location,
+      images: createIssueDto.images || [],
+      userId,
+      resolutionImages: [],
+      voiceUrl: createIssueDto.voiceUrl || '',
+      videoUrl: createIssueDto.videoUrl || '',
     });
 
-    const savedIssue = await newIssue.save();
+    const savedIssue = await this.issueRepository.save(newIssue);
     
     // Log activity: Issue Created
     await this.activitiesService.logActivity(
-      savedIssue._id.toString(),
+      savedIssue.id,
       'Issue Created',
       userId,
     );
 
-    return savedIssue;
+    // Fetch with populated user relations to return complete details
+    const issueWithRelations = await this.issueRepository.findOne({
+      where: { id: savedIssue.id },
+      relations: { user: true, officer: true },
+    });
+
+    return this.mapIssue(issueWithRelations);
   }
 
   async findAll(
@@ -70,144 +116,136 @@ export class IssuesService {
       category?: string;
     },
     user: User,
-  ): Promise<{ data: Issue[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: any[]; total: number; page: number; limit: number }> {
     const page = Math.max(1, Number(queryParams.page) || 1);
     const limit = Math.max(1, Number(queryParams.limit) || 10);
     const skip = (page - 1) * limit;
 
-    const filterQuery: any = {};
+    const query = this.issueRepository.createQueryBuilder('issue')
+      .leftJoinAndSelect('issue.user', 'user')
+      .leftJoinAndSelect('issue.officer', 'officer')
+      .orderBy('issue.createdAt', 'DESC');
 
-    // Search filter (ticketId, title, or description matching regex)
     if (queryParams.search) {
-      filterQuery.$or = [
-        { ticketId: { $regex: queryParams.search, $options: 'i' } },
-        { title: { $regex: queryParams.search, $options: 'i' } },
-        { description: { $regex: queryParams.search, $options: 'i' } },
-      ];
+      query.andWhere(
+        '(issue.ticketId LIKE :search OR issue.title LIKE :search OR issue.description LIKE :search)',
+        { search: `%${queryParams.search}%` }
+      );
     }
 
-    // Status filter
     if (queryParams.status) {
-      filterQuery.status = queryParams.status;
+      query.andWhere('issue.status = :status', { status: queryParams.status });
     }
 
-    // Category filter
     if (queryParams.category) {
-      filterQuery.category = queryParams.category;
+      query.andWhere('issue.category = :category', { category: queryParams.category as Category });
     }
 
     // RBAC: USER views own, OFFICER views assigned, ADMIN views all
     if (user.role === Role.USER) {
-      filterQuery.userId = user._id;
+      query.andWhere('issue.userId = :userId', { userId: user.id });
     } else if (user.role === Role.OFFICER) {
-      filterQuery.officerId = user._id;
+      query.andWhere('issue.officerId = :officerId', { officerId: user.id });
     }
 
-    const total = await this.issueModel.countDocuments(filterQuery);
-    const data = await this.issueModel
-      .find(filterQuery)
-      .populate('userId', 'name email mobile role')
-      .populate('officerId', 'name email mobile role')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
+    const total = await query.getCount();
+    const data = await query.skip(skip).take(limit).getMany();
 
     return {
-      data,
+      data: data.map((issue) => this.mapIssue(issue)),
       total,
       page,
       limit,
     };
   }
 
-  async findOne(id: string, user: User): Promise<Issue> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid issue ID format');
-    }
-
-    const issue = await this.issueModel
-      .findById(id)
-      .populate('userId', 'name email mobile role')
-      .populate('officerId', 'name email mobile role')
-      .exec();
+  async findOne(id: string, user: User): Promise<any> {
+    const issue = await this.issueRepository.findOne({
+      where: { id },
+      relations: { user: true, officer: true },
+    });
 
     if (!issue) {
       throw new NotFoundException(`Issue with ID ${id} not found`);
     }
 
     // RBAC: Check authorization to view details
-    if (user.role === Role.USER && issue.userId._id.toString() !== user._id.toString()) {
+    if (user.role === Role.USER && issue.userId !== user.id) {
       throw new ForbiddenException('You do not have access to view this issue');
     }
 
-    if (user.role === Role.OFFICER && issue.officerId?._id.toString() !== user._id.toString()) {
+    if (user.role === Role.OFFICER && issue.officerId !== user.id) {
       throw new ForbiddenException('You do not have access to view this issue');
     }
 
-    return issue;
+    return this.mapIssue(issue);
   }
 
-  async assignOfficer(id: string, officerId: string, adminId: string): Promise<Issue> {
-    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(officerId)) {
-      throw new BadRequestException('Invalid ID format');
-    }
-
+  async assignOfficer(id: string, officerId: string, adminId: string): Promise<any> {
     const officer = await this.usersService.findOneById(officerId);
     if (!officer || officer.role !== Role.OFFICER) {
       throw new BadRequestException('Target user is not an Officer');
     }
 
-    const issue = await this.issueModel.findById(id).exec();
+    const issue = await this.issueRepository.findOne({
+      where: { id },
+    });
     if (!issue) {
       throw new NotFoundException(`Issue with ID ${id} not found`);
     }
 
-    issue.officerId = new Types.ObjectId(officerId);
-    issue.status = Status.ASSIGNED;
+    await this.issueRepository.update(id, {
+      officerId,
+      status: Status.ASSIGNED,
+    });
 
-    const updatedIssue = await issue.save();
+    const updatedIssue = await this.issueRepository.findOne({
+      where: { id },
+      relations: { user: true, officer: true },
+    });
 
     // Log activity: Assigned To Officer
     await this.activitiesService.logActivity(
-      updatedIssue._id.toString(),
+      updatedIssue!.id,
       `Assigned To Officer: ${officer.name}`,
       adminId,
     );
 
-    return updatedIssue;
+    return this.mapIssue(updatedIssue);
   }
 
-  async updatePriority(id: string, updatePriorityDto: UpdatePriorityDto, adminId: string): Promise<Issue> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid issue ID format');
-    }
-
-    const issue = await this.issueModel.findById(id).exec();
+  async updatePriority(id: string, updatePriorityDto: UpdatePriorityDto, adminId: string): Promise<any> {
+    const issue = await this.issueRepository.findOne({
+      where: { id },
+    });
     if (!issue) {
       throw new NotFoundException(`Issue with ID ${id} not found`);
     }
 
     const oldPriority = issue.priority;
-    issue.priority = updatePriorityDto.priority;
-    const updatedIssue = await issue.save();
+    await this.issueRepository.update(id, {
+      priority: updatePriorityDto.priority,
+    });
+
+    const updatedIssue = await this.issueRepository.findOne({
+      where: { id },
+      relations: { user: true, officer: true },
+    });
 
     // Log activity
     await this.activitiesService.logActivity(
-      updatedIssue._id.toString(),
+      updatedIssue!.id,
       `Priority updated from ${oldPriority} to ${updatePriorityDto.priority}`,
       adminId,
     );
 
-    return updatedIssue;
+    return this.mapIssue(updatedIssue);
   }
 
-  async updateStatus(id: string, updateStatusDto: UpdateStatusDto, user: User): Promise<Issue> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid issue ID format');
-    }
-
-    const issue = await this.issueModel.findById(id).exec();
+  async updateStatus(id: string, updateStatusDto: UpdateStatusDto, user: User): Promise<any> {
+    const issue = await this.issueRepository.findOne({
+      where: { id },
+    });
     if (!issue) {
       throw new NotFoundException(`Issue with ID ${id} not found`);
     }
@@ -216,11 +254,11 @@ export class IssuesService {
     const targetStatus = updateStatusDto.status;
 
     // RBAC: Verify if the user is allowed to initiate status updates
-    if (user.role === Role.USER && issue.userId.toString() !== user._id.toString()) {
+    if (user.role === Role.USER && issue.userId !== user.id) {
       throw new ForbiddenException('You are not authorized to update this issue status');
     }
 
-    if (user.role === Role.OFFICER && issue.officerId?.toString() !== user._id.toString()) {
+    if (user.role === Role.OFFICER && issue.officerId !== user.id) {
       throw new ForbiddenException('You are not authorized to update this issue status');
     }
 
@@ -250,9 +288,6 @@ export class IssuesService {
       if (!updateStatusDto.resolutionImages || updateStatusDto.resolutionImages.length === 0) {
         throw new BadRequestException('At least one resolution image is required to resolve the issue');
       }
-      
-      issue.resolutionNotes = updateStatusDto.resolutionNotes;
-      issue.resolutionImages = updateStatusDto.resolutionImages;
     }
 
     // RESOLVED -> CLOSED (User / Admin)
@@ -280,8 +315,21 @@ export class IssuesService {
       throw new BadRequestException(`Invalid status transition to ${targetStatus}`);
     }
 
-    issue.status = targetStatus;
-    const updatedIssue = await issue.save();
+    const updateData: any = {
+      status: targetStatus,
+    };
+
+    if (targetStatus === Status.RESOLVED) {
+      updateData.resolutionNotes = updateStatusDto.resolutionNotes;
+      updateData.resolutionImages = updateStatusDto.resolutionImages;
+    }
+
+    await this.issueRepository.update(id, updateData);
+
+    const updatedIssue = await this.issueRepository.findOne({
+      where: { id },
+      relations: { user: true, officer: true },
+    });
 
     // Log Activity: Status update
     let actionText = `Status updated to ${targetStatus}`;
@@ -291,12 +339,12 @@ export class IssuesService {
     else if (targetStatus === Status.REOPENED) actionText = 'Issue Reopened';
 
     await this.activitiesService.logActivity(
-      updatedIssue._id.toString(),
+      updatedIssue!.id,
       actionText,
-      user._id.toString(),
+      user.id,
     );
 
-    return updatedIssue;
+    return this.mapIssue(updatedIssue);
   }
 
   async findActivities(id: string, user: User) {

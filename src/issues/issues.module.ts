@@ -1,23 +1,20 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { IssuesService } from './issues.service';
 import { IssuesController } from './issues.controller';
-import { Issue, IssueSchema } from './schemas/issue.schema';
-import { Counter, CounterSchema } from './schemas/counter.schema';
+import { Issue } from './entities/issue.entity';
+import { Counter } from './entities/counter.entity';
 import { UsersModule } from '../users/users.module';
 import { ActivitiesModule } from '../activities/activities.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Issue.name, schema: IssueSchema },
-      { name: Counter.name, schema: CounterSchema },
-    ]),
+    TypeOrmModule.forFeature([Issue, Counter]),
     UsersModule,
     ActivitiesModule,
   ],
   controllers: [IssuesController],
   providers: [IssuesService],
-  exports: [IssuesService, MongooseModule],
+  exports: [IssuesService, TypeOrmModule],
 })
 export class IssuesModule {}

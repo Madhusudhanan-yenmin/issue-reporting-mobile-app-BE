@@ -4,7 +4,8 @@ import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
-import { User } from '../users/schemas/user.schema';
+import { User } from '../users/entities/user.entity';
+import { mapDbResponse } from '../common/utils/db-mapper';
 
 @ApiTags('Comments Management')
 @Controller('comments')
@@ -21,9 +22,10 @@ export class CommentsController {
   @ApiResponse({ status: 403, description: 'Forbidden (no access to issue)' })
   async create(
     @Body() createCommentDto: CreateCommentDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.commentsService.create(createCommentDto, user);
+    const data = await this.commentsService.create(createCommentDto, user);
+    return mapDbResponse(data);
   }
 
   @Get(':issueId')
@@ -34,8 +36,9 @@ export class CommentsController {
   @ApiResponse({ status: 403, description: 'Forbidden (no access to issue)' })
   async findByIssueId(
     @Param('issueId') issueId: string,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.commentsService.findByIssueId(issueId, user);
+    const data = await this.commentsService.findByIssueId(issueId, user);
+    return mapDbResponse(data);
   }
 }
