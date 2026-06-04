@@ -41,6 +41,12 @@ export class Issue extends Document {
 
   @Prop({ type: [String], default: [] })
   resolutionImages: string[];
+
+  @Prop({ default: '' })
+  voiceUrl: string;
+
+  @Prop({ default: '' })
+  videoUrl: string;
 }
 
 export const IssueSchema = SchemaFactory.createForClass(Issue);

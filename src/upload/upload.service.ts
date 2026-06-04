@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
+import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class UploadService {
@@ -29,14 +31,33 @@ export class UploadService {
     }
   }
 
-  async uploadFile(file: Express.Multer.File): Promise<{ secure_url: string }> {
+  async uploadFile(file: Express.Multer.File, req?: any): Promise<{ secure_url: string }> {
     if (!this.isConfigured) {
-      // Simulate file upload latency and return high-quality mock URL
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const randomSeed = Math.floor(Math.random() * 1000);
-      return {
-        secure_url: `https://picsum.photos/seed/${randomSeed}/800/600`,
-      };
+      try {
+        const uploadDir = join(process.cwd(), 'uploads');
+        if (!existsSync(uploadDir)) {
+          mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const fileExt = file.originalname.split('.').pop() || 'jpg';
+        const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}.${fileExt}`;
+        const filePath = join(uploadDir, uniqueFilename);
+
+        writeFileSync(filePath, file.buffer);
+
+        const protocol = req?.secure ? 'https' : 'http';
+        const host = req?.headers?.host || 'localhost:3000';
+        const localUrl = `${protocol}://${host}/uploads/${uniqueFilename}`;
+
+        this.logger.log(`File saved locally: ${filePath}. Available at: ${localUrl}`);
+        return { secure_url: localUrl };
+      } catch (err: any) {
+        this.logger.error('Failed to save file locally, falling back to mock Picsum URL', err);
+        const randomSeed = Math.floor(Math.random() * 1000);
+        return {
+          secure_url: `https://picsum.photos/seed/${randomSeed}/800/600`,
+        };
+      }
     }
 
     return new Promise((resolve, reject) => {
@@ -58,8 +79,8 @@ export class UploadService {
     });
   }
 
-  async uploadMultipleFiles(files: Express.Multer.File[]): Promise<{ secure_url: string }[]> {
-    const uploadPromises = files.map((file) => this.uploadFile(file));
+  async uploadMultipleFiles(files: Express.Multer.File[], req?: any): Promise<{ secure_url: string }[]> {
+    const uploadPromises = files.map((file) => this.uploadFile(file, req));
     return Promise.all(uploadPromises);
   }
 }
