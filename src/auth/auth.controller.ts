@@ -5,7 +5,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
-import { User } from '../users/schemas/user.schema';
+import { User } from '../users/entities/user.entity';
+import { mapDbResponse } from '../common/utils/db-mapper';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -18,7 +19,8 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 409, description: 'Email already exists' })
   async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+    const data = await this.authService.register(registerDto);
+    return mapDbResponse(data);
   }
 
   @Post('login')
@@ -82,7 +84,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, description: 'Profile retrieved' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getProfile(@GetUser() user: User) {
-    return user;
+  async getProfile(@GetUser() user: any) {
+    return mapDbResponse(user);
   }
 }

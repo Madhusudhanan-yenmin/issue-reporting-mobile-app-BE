@@ -20,7 +20,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Role } from '../common/enums/role.enum';
 import { Status } from '../common/enums/status.enum';
-import { User } from '../users/schemas/user.schema';
+import { User } from '../users/entities/user.entity';
+import { mapDbResponse } from '../common/utils/db-mapper';
 
 @ApiTags('Issues Management')
 @Controller('issues')
@@ -38,9 +39,10 @@ export class IssuesController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
     @Body() createIssueDto: CreateIssueDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.create(createIssueDto, user._id.toString());
+    const data = await this.issuesService.create(createIssueDto, user.id);
+    return mapDbResponse(data);
   }
 
   @Get()
@@ -48,14 +50,15 @@ export class IssuesController {
   @ApiResponse({ status: 200, description: 'List of issues retrieved' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findAll(
-    @GetUser() user: User,
+    @GetUser() user: any,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('search') search?: string,
     @Query('status') status?: Status,
     @Query('category') category?: string,
   ) {
-    return this.issuesService.findAll({ page, limit, search, status, category }, user);
+    const data = await this.issuesService.findAll({ page, limit, search, status, category }, user);
+    return mapDbResponse(data);
   }
 
   @Get(':id')
@@ -67,9 +70,10 @@ export class IssuesController {
   @ApiResponse({ status: 404, description: 'Issue not found' })
   async findOne(
     @Param('id') id: string,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.findOne(id, user);
+    const data = await this.issuesService.findOne(id, user);
+    return mapDbResponse(data);
   }
 
   @Patch(':id/assign')
@@ -83,9 +87,10 @@ export class IssuesController {
   async assignOfficer(
     @Param('id') id: string,
     @Body() assignOfficerDto: AssignOfficerDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.assignOfficer(id, assignOfficerDto.officerId, user._id.toString());
+    const data = await this.issuesService.assignOfficer(id, assignOfficerDto.officerId, user.id);
+    return mapDbResponse(data);
   }
 
   @Patch(':id/priority')
@@ -99,9 +104,10 @@ export class IssuesController {
   async updatePriority(
     @Param('id') id: string,
     @Body() updatePriorityDto: UpdatePriorityDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.updatePriority(id, updatePriorityDto, user._id.toString());
+    const data = await this.issuesService.updatePriority(id, updatePriorityDto, user.id);
+    return mapDbResponse(data);
   }
 
   @Patch(':id/status')
@@ -114,9 +120,10 @@ export class IssuesController {
   async updateStatus(
     @Param('id') id: string,
     @Body() updateStatusDto: UpdateStatusDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.updateStatus(id, updateStatusDto, user);
+    const data = await this.issuesService.updateStatus(id, updateStatusDto, user);
+    return mapDbResponse(data);
   }
 
   @Get(':id/activities')
@@ -126,8 +133,9 @@ export class IssuesController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getActivities(
     @Param('id') id: string,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.issuesService.findActivities(id, user);
+    const data = await this.issuesService.findActivities(id, user);
+    return mapDbResponse(data);
   }
 }

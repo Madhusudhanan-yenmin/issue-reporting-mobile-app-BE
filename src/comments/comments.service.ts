@@ -1,49 +1,64 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Comment } from './schemas/comment.schema';
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Comment } from './entities/comment.entity';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { IssuesService } from '../issues/issues.service';
-import { User } from '../users/schemas/user.schema';
+import { User } from '../users/entities/user.entity';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class CommentsService {
   constructor(
-    @InjectModel(Comment.name) private readonly commentModel: Model<Comment>,
+    @InjectRepository(Comment)
+    private readonly commentRepository: Repository<Comment>,
     private readonly issuesService: IssuesService,
   ) {}
 
-  async create(createCommentDto: CreateCommentDto, user: User): Promise<Comment> {
+  private mapComment(comment: any): any {
+    if (!comment) return comment;
+    const { user, ...rest } = comment;
+    return {
+      ...rest,
+      userId: user ? { ...user, _id: user.id } : null,
+    };
+  }
+
+  async create(createCommentDto: CreateCommentDto, user: User): Promise<any> {
     const { issueId, message } = createCommentDto;
 
     // Check if issue exists and user has rights to view it (verifies access implicitly)
     await this.issuesService.findOne(issueId, user);
 
-    const newComment = new this.commentModel({
-      issueId: new Types.ObjectId(issueId),
-      userId: user._id,
+    const id = crypto.randomBytes(12).toString('hex');
+    const newComment = this.commentRepository.create({
+      id,
+      issueId,
+      userId: user.id,
       message,
     });
 
-    const savedComment = await newComment.save();
-    return this.commentModel
-      .findById(savedComment._id)
-      .populate('userId', 'name role')
-      .exec() as Promise<Comment>;
+    const savedComment = await this.commentRepository.save(newComment);
+    
+    // Fetch with populated user relations to return complete details
+    const commentWithRelations = await this.commentRepository.findOne({
+      where: { id: savedComment.id },
+      relations: { user: true },
+    });
+
+    return this.mapComment(commentWithRelations);
   }
 
-  async findByIssueId(issueId: string, user: User): Promise<Comment[]> {
-    if (!Types.ObjectId.isValid(issueId)) {
-      throw new BadRequestException('Invalid issue ID format');
-    }
-
+  async findByIssueId(issueId: string, user: User): Promise<any[]> {
     // Verify issue access
     await this.issuesService.findOne(issueId, user);
 
-    return this.commentModel
-      .find({ issueId: new Types.ObjectId(issueId) })
-      .populate('userId', 'name role')
-      .sort({ createdAt: 1 })
-      .exec();
+    const comments = await this.commentRepository.find({
+      where: { issueId },
+      relations: { user: true },
+      order: { createdAt: 'ASC' },
+    });
+
+    return comments.map((comment) => this.mapComment(comment));
   }
 }

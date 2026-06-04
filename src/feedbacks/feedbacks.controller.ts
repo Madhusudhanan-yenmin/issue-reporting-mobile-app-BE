@@ -4,7 +4,8 @@ import { FeedbacksService } from './feedbacks.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
-import { User } from '../users/schemas/user.schema';
+import { User } from '../users/entities/user.entity';
+import { mapDbResponse } from '../common/utils/db-mapper';
 
 @ApiTags('Feedbacks Management')
 @Controller('feedback')
@@ -22,9 +23,10 @@ export class FeedbacksController {
   @ApiResponse({ status: 409, description: 'Feedback already exists' })
   async create(
     @Body() createFeedbackDto: CreateFeedbackDto,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.feedbacksService.create(createFeedbackDto, user);
+    const data = await this.feedbacksService.create(createFeedbackDto, user);
+    return mapDbResponse(data);
   }
 
   @Get(':issueId')
@@ -35,8 +37,9 @@ export class FeedbacksController {
   @ApiResponse({ status: 403, description: 'Forbidden (no access to issue)' })
   async findByIssueId(
     @Param('issueId') issueId: string,
-    @GetUser() user: User,
+    @GetUser() user: any,
   ) {
-    return this.feedbacksService.findByIssueId(issueId, user);
+    const data = await this.feedbacksService.findByIssueId(issueId, user);
+    return mapDbResponse(data);
   }
 }

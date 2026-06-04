@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { mapDbResponse } from '../common/utils/db-mapper';
 
 @ApiTags('Users Management')
 @Controller('users')
@@ -20,7 +21,8 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getAllUsersAndOfficers() {
-    return this.usersService.findAllUsersAndOfficers();
+    const data = await this.usersService.findAllUsersAndOfficers();
+    return mapDbResponse(data);
   }
 
   @Get('officers')
@@ -30,6 +32,7 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getOfficers() {
-    return this.usersService.findAllOfficers();
+    const data = await this.usersService.findAllOfficers();
+    return mapDbResponse(data);
   }
 }
