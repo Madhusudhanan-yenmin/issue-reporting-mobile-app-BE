@@ -162,7 +162,7 @@ export class IssuesService {
   async findOne(id: string, user: User): Promise<any> {
     const issue = await this.issueRepository.findOne({
       where: { id },
-      relations: { user: true, officer: true },
+      relations: { user: true, officer: true, feedback: true },
     });
 
     if (!issue) {
