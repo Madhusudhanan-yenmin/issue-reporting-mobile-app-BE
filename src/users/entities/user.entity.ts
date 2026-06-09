@@ -24,6 +24,12 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.USER })
   role: Role;
 
+  @Column({ nullable: true })
+  district?: string;
+
+  @Column({ nullable: true })
+  officerRole?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -30,8 +30,23 @@ export class Issue {
   @Column({ type: 'enum', enum: Status, default: Status.OPEN })
   status: Status;
 
-  @Column()
+  @Column({ default: '' })
   location: string;
+
+  @Column({ default: '' })
+  district: string;
+
+  @Column({ default: '' })
+  town: string;
+
+  @Column({ default: '' })
+  address: string;
+
+  @Column({ type: 'double', nullable: true })
+  latitude?: number;
+
+  @Column({ type: 'double', nullable: true })
+  longitude?: number;
 
   @Column({ type: 'json' })
   images: string[];
