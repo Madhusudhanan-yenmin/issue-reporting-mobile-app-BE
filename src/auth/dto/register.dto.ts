@@ -29,4 +29,14 @@ export class RegisterDto {
   @IsEnum(Role, { message: 'Invalid role specified' })
   @IsOptional()
   role?: Role;
+
+  @ApiProperty({ example: 'Cuddalore', required: false, description: 'District of the officer' })
+  @IsString()
+  @IsOptional()
+  district?: string;
+
+  @ApiProperty({ example: 'Municipality Officer', required: false, description: 'Role of the officer' })
+  @IsString()
+  @IsOptional()
+  officerRole?: string;
 }
