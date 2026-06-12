@@ -55,7 +55,7 @@ export class FeedbacksService {
       id,
       issueId,
       rating,
-      comment,
+      comment: comment || '',
     });
 
     return this.feedbackRepository.save(newFeedback);

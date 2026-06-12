@@ -39,6 +39,16 @@ export class UsersService {
     return this.userRepository.find({ where: { role: Role.OFFICER } });
   }
 
+  async findOfficerByDistrict(district: string): Promise<User | null> {
+    if (!district) return null;
+    return this.userRepository.findOne({
+      where: {
+        role: Role.OFFICER,
+        district,
+      },
+    });
+  }
+
   async findAllUsersAndOfficers(): Promise<User[]> {
     return this.userRepository.find({
       where: {
