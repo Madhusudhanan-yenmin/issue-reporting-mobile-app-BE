@@ -72,6 +72,11 @@ export class IssuesService {
   async create(createIssueDto: CreateIssueDto, userId: string): Promise<any> {
     const ticketId = await this.generateTicketId();
     const id = crypto.randomBytes(12).toString('hex');
+
+    // Automatically check for an officer registered in the issue's district
+    const officer = await this.usersService.findOfficerByDistrict(createIssueDto.district);
+    const initialStatus = officer ? Status.ASSIGNED : Status.OPEN;
+    const assignedOfficerId = officer ? officer.id : null;
     
     const newIssue = this.issueRepository.create({
       id,
@@ -80,7 +85,7 @@ export class IssuesService {
       description: createIssueDto.description,
       category: createIssueDto.category,
       priority: createIssueDto.priority,
-      status: Status.OPEN,
+      status: initialStatus,
       district: createIssueDto.district,
       town: createIssueDto.town,
       address: createIssueDto.address,
@@ -89,6 +94,7 @@ export class IssuesService {
       location: createIssueDto.location || `${createIssueDto.address}, ${createIssueDto.town}, ${createIssueDto.district}`,
       images: createIssueDto.images || [],
       userId,
+      officerId: assignedOfficerId,
       resolutionImages: [],
       voiceUrl: createIssueDto.voiceUrl || '',
       videoUrl: createIssueDto.videoUrl || '',
@@ -102,6 +108,15 @@ export class IssuesService {
       'Issue Created',
       userId,
     );
+
+    // If automatically assigned, log activity: Assigned To Officer
+    if (officer) {
+      await this.activitiesService.logActivity(
+        savedIssue.id,
+        `Assigned To Officer: ${officer.name}`,
+        userId,
+      );
+    }
 
     // Fetch with populated user relations to return complete details
     const issueWithRelations = await this.issueRepository.findOne({

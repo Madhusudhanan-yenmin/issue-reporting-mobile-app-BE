@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString, Max, Min, Matches } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, Max, Min, IsOptional } from 'class-validator';
 
 export class CreateFeedbackDto {
   @ApiProperty({ example: '60d21b4667d0d8992e610c85', description: 'Issue ID being rated' })
@@ -14,8 +14,8 @@ export class CreateFeedbackDto {
   @IsNotEmpty({ message: 'Rating is required' })
   rating: number;
 
-  @ApiProperty({ example: 'Excellent and quick resolution!', description: 'Additional comment' })
+  @ApiProperty({ example: 'Excellent and quick resolution!', required: false, description: 'Additional comment' })
   @IsString()
-  @IsNotEmpty({ message: 'Comment is required' })
-  comment: string;
+  @IsOptional()
+  comment?: string;
 }
