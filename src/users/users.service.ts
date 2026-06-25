@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, IsNull } from 'typeorm';
 import { User } from './entities/user.entity';
+import { Issue } from '../issues/entities/issue.entity';
 import { Role } from '../common/enums/role.enum';
+import { Status } from '../common/enums/status.enum';
+import { ActivitiesService } from '../activities/activities.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -10,6 +13,9 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Issue)
+    private readonly issueRepository: Repository<Issue>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(userData: Partial<User> & { password?: string }): Promise<User> {
@@ -19,7 +25,38 @@ export class UsersService {
       id,
       email: userData.email!.toLowerCase(),
     });
-    return this.userRepository.save(newUser);
+    const savedUser = await this.userRepository.save(newUser);
+
+    if (savedUser.role === Role.OFFICER && savedUser.district) {
+      await this.assignOpenIssuesToOfficer(savedUser.id, savedUser.name, savedUser.district);
+    }
+
+    return savedUser;
+  }
+
+  async assignOpenIssuesToOfficer(officerId: string, officerName: string, district: string): Promise<void> {
+    if (!district) return;
+
+    const openIssues = await this.issueRepository.find({
+      where: {
+        district,
+        officerId: IsNull(),
+        status: Status.OPEN,
+      },
+    });
+
+    for (const issue of openIssues) {
+      await this.issueRepository.update(issue.id, {
+        officerId,
+        status: Status.ASSIGNED,
+      });
+
+      await this.activitiesService.logActivity(
+        issue.id,
+        `Assigned To Officer: ${officerName}`,
+        officerId,
+      );
+    }
   }
 
   async findOneByEmail(email: string): Promise<User | null> {
