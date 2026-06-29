@@ -32,18 +32,27 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @ApiOperation({ summary: 'Request password reset instructions (Mock)' })
-  @ApiResponse({ status: 200, description: 'Reset instructions successfully sent' })
-  @ApiResponse({ status: 400, description: 'No email provided' })
+  @ApiOperation({ summary: 'Request password reset OTP' })
+  @ApiResponse({ status: 200, description: 'Reset OTP successfully sent' })
+  @ApiResponse({ status: 400, description: 'No email provided or user not found' })
   async forgotPassword(@Body('email') email: string) {
     if (!email) {
       throw new BadRequestException('Email is required');
     }
-    return { message: `Password reset instructions sent to ${email}` };
+    const result = await this.authService.generateAndSendOtp(email);
+    if (result.mocked) {
+      return {
+        message: 'SMTP not configured. Password reset OTP logged to console.',
+        isMocked: true,
+        otp: result.otp,
+        previewUrl: result.previewUrl,
+      };
+    }
+    return { message: `Password reset OTP sent to ${email}`, isMocked: false };
   }
 
   @Post('reset-password')
-  @ApiOperation({ summary: 'Reset user password with mock OTP validation' })
+  @ApiOperation({ summary: 'Reset user password with OTP validation' })
   @ApiResponse({ status: 200, description: 'Password successfully reset' })
   @ApiResponse({ status: 400, description: 'Invalid OTP or parameters' })
   async resetPassword(
@@ -54,10 +63,7 @@ export class AuthController {
     if (!email || !otp || !newPassword) {
       throw new BadRequestException('All fields are required');
     }
-    if (otp !== '1234') {
-      throw new BadRequestException('Invalid OTP. Please use mock code 1234');
-    }
-    await this.authService.resetPassword(email, newPassword);
+    await this.authService.resetPassword(email, otp, newPassword);
     return { message: 'Password reset successfully' };
   }
 

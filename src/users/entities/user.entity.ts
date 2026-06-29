@@ -30,6 +30,12 @@ export class User {
   @Column({ nullable: true })
   officerRole?: string;
 
+  @Column({ type: 'varchar', nullable: true, select: false })
+  otp: string | null;
+
+  @Column({ type: 'timestamp', nullable: true, select: false })
+  otpExpiry: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -60,11 +60,13 @@ export class UsersService {
   }
 
   async findOneByEmail(email: string): Promise<User | null> {
-    // We explicitly select the password field for login verification
+    // We explicitly select the password and OTP fields for auth verification
     return this.userRepository
       .createQueryBuilder('user')
       .where('user.email = :email', { email: email.toLowerCase() })
       .addSelect('user.password')
+      .addSelect('user.otp')
+      .addSelect('user.otpExpiry')
       .getOne();
   }
 
@@ -96,5 +98,13 @@ export class UsersService {
 
   async updatePassword(id: string, passwordHash: string): Promise<void> {
     await this.userRepository.update(id, { password: passwordHash });
+  }
+
+  async setOtp(id: string, otp: string, expiry: Date): Promise<void> {
+    await this.userRepository.update(id, { otp, otpExpiry: expiry });
+  }
+
+  async clearOtp(id: string): Promise<void> {
+    await this.userRepository.update(id, { otp: null, otpExpiry: null });
   }
 }
